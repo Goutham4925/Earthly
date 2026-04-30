@@ -110,12 +110,31 @@ export default function OperationsDashboard({ role }: { role: DashboardRole }) {
 
   const approveUser = async (target: SessionUser, status: 'approved' | 'rejected') => {
     setSavingId(target.id);
-    await fetch('/api/users', {
+    setMessage('Updating...');
+
+    const response = await fetch('/api/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: target.id, status }),
     });
-    setUsers((current) => current.map((item) => (item.id === target.id ? { ...item, status } : item)));
+
+    if (!response.ok) {
+      let errorMessage = 'Approval failed';
+      try {
+        const data = await response.json();
+        errorMessage = (data?.error as string) ?? errorMessage;
+      } catch {
+        // ignore parse errors
+      }
+      setMessage(errorMessage);
+      setSavingId(null);
+      return;
+    }
+
+    setMessage(`User ${status}`);
+    // Re-sync from backend to ensure DB update actually happened
+    const userData = await fetch('/api/users').then((res) => res.json());
+    setUsers(userData.users ?? []);
     setSavingId(null);
   };
 
