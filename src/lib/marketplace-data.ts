@@ -42,7 +42,13 @@ export interface MarketplaceOrder {
   total: number;
   paymentMethod: 'cod' | 'razorpay';
   createdAt: string;
-  items: Array<{ productId: string; name: string; quantity: number; price: number; vendor?: string }>;
+  items: Array<{
+    productId: string;
+    name: string;
+    quantity: number;
+    price: number;
+    vendor?: string;
+  }>;
 }
 
 export interface SessionUser extends Omit<AppUser, 'password'> {}
@@ -50,10 +56,46 @@ export interface SessionUser extends Omit<AppUser, 'password'> {}
 const sessionCookie = 'agromarket_session';
 
 export const demoUsers: AppUser[] = [
-  { id: 'user-001', role: 'user', status: 'approved', name: 'Rajan Kumar', email: 'rajan.kumar@agromarket.in', password: 'Farmer@2026', phone: '9876543210', provider: 'password' },
-  { id: 'vendor-001', role: 'vendor', status: 'approved', name: 'Meera Seeds', email: 'greenfields.seeds@vendor.in', password: 'Vendor@2026', phone: '9988776655', vendor: 'Green Fields Seeds', provider: 'password' },
-  { id: 'employee-001', role: 'employee', status: 'approved', name: 'Suresh Yadav', email: 'suresh.delivery@agromarket.in', password: 'Agent@2026', phone: '9123456789', provider: 'password' },
-  { id: 'admin-001', role: 'admin', status: 'approved', name: 'AgroMarket Admin', email: 'admin@agromarket.in', password: 'Admin@2026', provider: 'password' },
+  {
+    id: 'user-001',
+    role: 'user',
+    status: 'approved',
+    name: 'Rajan Kumar',
+    email: 'rajan.kumar@agromarket.in',
+    password: 'Farmer@2026',
+    phone: '9876543210',
+    provider: 'password',
+  },
+  {
+    id: 'vendor-001',
+    role: 'vendor',
+    status: 'approved',
+    name: 'Meera Seeds',
+    email: 'greenfields.seeds@vendor.in',
+    password: 'Vendor@2026',
+    phone: '9988776655',
+    vendor: 'Green Fields Seeds',
+    provider: 'password',
+  },
+  {
+    id: 'employee-001',
+    role: 'employee',
+    status: 'approved',
+    name: 'Suresh Yadav',
+    email: 'suresh.delivery@agromarket.in',
+    password: 'Agent@2026',
+    phone: '9123456789',
+    provider: 'password',
+  },
+  {
+    id: 'admin-001',
+    role: 'admin',
+    status: 'approved',
+    name: 'AgroMarket Admin',
+    email: 'admin@agromarket.in',
+    password: 'Admin@2026',
+    provider: 'password',
+  },
 ];
 
 const seedOrders: MarketplaceOrder[] = [
@@ -94,19 +136,48 @@ const seedOrders: MarketplaceOrder[] = [
     paymentMethod: 'razorpay',
     createdAt: '2026-04-29T13:10:00.000Z',
     items: [
-      { productId: 'prod-002', name: 'Hybrid Tomato Seeds - Arka Rakshak', quantity: 2, price: 480, vendor: 'Green Fields Seeds' },
-      { productId: 'prod-012', name: 'Maize Hybrid Seeds - Pioneer 30V92', quantity: 1, price: 920, vendor: 'Green Fields Seeds' },
+      {
+        productId: 'prod-002',
+        name: 'Hybrid Tomato Seeds - Arka Rakshak',
+        quantity: 2,
+        price: 480,
+        vendor: 'Green Fields Seeds',
+      },
+      {
+        productId: 'prod-012',
+        name: 'Maize Hybrid Seeds - Pioneer 30V92',
+        quantity: 1,
+        price: 920,
+        vendor: 'Green Fields Seeds',
+      },
     ],
   },
 ];
 
 let pool: Pool | null = null;
 
+function getSanitizedDatabaseUrl() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) return null;
+
+  try {
+    const u = new URL(databaseUrl);
+    u.searchParams.delete('sslmode');
+    return u.toString();
+  } catch {
+    return databaseUrl.replace(/([?&])sslmode=[^&]+/g, '').replace(/[?&]$/, '');
+  }
+}
+
 function getPool() {
   if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('your-aiven-')) return null;
+
+  const databaseUrl = getSanitizedDatabaseUrl();
+  if (!databaseUrl) return null;
+
   if (!pool) {
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: databaseUrl,
       ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
     });
   }
@@ -141,7 +212,9 @@ function signPayload(payload: string) {
 }
 
 function makeSession(user: SessionUser) {
-  const payload = Buffer.from(JSON.stringify({ user, exp: Date.now() + 1000 * 60 * 60 * 24 * 7 })).toString('base64url');
+  const payload = Buffer.from(
+    JSON.stringify({ user, exp: Date.now() + 1000 * 60 * 60 * 24 * 7 })
+  ).toString('base64url');
   return `${payload}.${signPayload(payload)}`;
 }
 
@@ -151,7 +224,10 @@ function verifySession(value?: string) {
   if (!payload || !signature) return null;
   const expected = signPayload(payload);
   if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
-  const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { user: SessionUser; exp: number };
+  const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString()) as {
+    user: SessionUser;
+    exp: number;
+  };
   return parsed.exp > Date.now() ? parsed.user : null;
 }
 
@@ -241,16 +317,23 @@ export async function authenticateUser(email: string, password: string, role: Us
       );
       const user = result.rows[0] ? userFromRow(result.rows[0]) : null;
       if (!user || !verifyPassword(password, user.passwordHash ?? user.password)) return null;
-      if (user.status !== 'approved') throw new Error(`Your ${role} account is ${user.status}. Admin approval is required.`);
+      if (user.status !== 'approved')
+        throw new Error(`Your ${role} account is ${user.status}. Admin approval is required.`);
       return publicUser(user);
     } catch (error: any) {
       if (String(error.message ?? '').includes('approval')) throw error;
     }
   }
 
-  const user = demoUsers.find((item) => item.email.toLowerCase() === email.toLowerCase() && item.password === password && item.role === role);
+  const user = demoUsers.find(
+    (item) =>
+      item.email.toLowerCase() === email.toLowerCase() &&
+      item.password === password &&
+      item.role === role
+  );
   if (!user) return null;
-  if (user.status !== 'approved') throw new Error(`Your ${role} account is ${user.status}. Admin approval is required.`);
+  if (user.status !== 'approved')
+    throw new Error(`Your ${role} account is ${user.status}. Admin approval is required.`);
   return publicUser(user);
 }
 
@@ -274,7 +357,17 @@ export async function registerUser(input: Partial<AppUser> & { password: string 
       await db.query(
         `insert into app_users (id, role, status, name, email, password_hash, phone, vendor, provider)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [user.id, user.role, user.status, user.name, user.email, user.passwordHash, user.phone, user.vendor, user.provider]
+        [
+          user.id,
+          user.role,
+          user.status,
+          user.name,
+          user.email,
+          user.passwordHash,
+          user.phone,
+          user.vendor,
+          user.provider,
+        ]
       );
     } catch {}
   }
@@ -284,7 +377,10 @@ export async function registerUser(input: Partial<AppUser> & { password: string 
 export async function findOrCreateGoogleUser(profile: { email: string; name: string }) {
   const db = getPool();
   if (db) {
-    const existing = await db.query('select * from app_users where lower(email) = lower($1) limit 1', [profile.email]);
+    const existing = await db.query(
+      'select * from app_users where lower(email) = lower($1) limit 1',
+      [profile.email]
+    );
     if (existing.rows[0]) return publicUser(userFromRow(existing.rows[0]));
     const user: AppUser = {
       id: randomUUID(),
@@ -300,12 +396,22 @@ export async function findOrCreateGoogleUser(profile: { email: string; name: str
     );
     return publicUser(user);
   }
-  return publicUser({ id: `google-${profile.email}`, role: 'user', status: 'approved', name: profile.name, email: profile.email, provider: 'google' });
+  return publicUser({
+    id: `google-${profile.email}`,
+    role: 'user',
+    status: 'approved',
+    name: profile.name,
+    email: profile.email,
+    provider: 'google',
+  });
 }
 
 export async function listUsers(role?: UserRole, status?: AccountStatus) {
   const db = getPool();
-  if (!db) return demoUsers.filter((user) => (!role || user.role === role) && (!status || user.status === status)).map(publicUser);
+  if (!db)
+    return demoUsers
+      .filter((user) => (!role || user.role === role) && (!status || user.status === status))
+      .map(publicUser);
   const clauses: string[] = [];
   const values: string[] = [];
   if (role) {
@@ -316,13 +422,20 @@ export async function listUsers(role?: UserRole, status?: AccountStatus) {
     values.push(status);
     clauses.push(`status = $${values.length}`);
   }
-  const result = await db.query(`select * from app_users ${clauses.length ? `where ${clauses.join(' and ')}` : ''} order by created_at desc`, values);
+  const result = await db.query(
+    `select * from app_users ${clauses.length ? `where ${clauses.join(' and ')}` : ''} order by created_at desc`,
+    values
+  );
   return result.rows.map(userFromRow).map(publicUser);
 }
 
 export async function updateUserStatus(id: string, status: AccountStatus) {
   const db = getPool();
-  if (db) await db.query('update app_users set status = $2, updated_at = now() where id = $1', [id, status]);
+  if (db)
+    await db.query('update app_users set status = $2, updated_at = now() where id = $1', [
+      id,
+      status,
+    ]);
   return { id, status };
 }
 
@@ -447,7 +560,10 @@ export async function createOrder(order: MarketplaceOrder) {
   return order;
 }
 
-export async function updateOrder(id: string, patch: Partial<Pick<MarketplaceOrder, 'status' | 'assignedAgentId' | 'assignedAgent'>>) {
+export async function updateOrder(
+  id: string,
+  patch: Partial<Pick<MarketplaceOrder, 'status' | 'assignedAgentId' | 'assignedAgent'>>
+) {
   const db = getPool();
   if (!db) return { id, ...patch };
   await db.query(
