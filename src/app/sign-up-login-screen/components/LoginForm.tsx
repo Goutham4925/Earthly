@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { AuthRole } from './AuthShell';
 
 interface LoginFormData {
@@ -57,25 +58,21 @@ export default function LoginForm({ role }: { role: AuthRole }) {
     setValue('password', credential.password);
   };
 
+  const { signIn } = useAuth();
+
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: data.email, password: data.password, role }),
-    });
-    const result = await response.json();
-    setLoading(false);
-
-    if (!response.ok) {
-      setError('root', { message: result.error ?? 'Invalid credentials for the selected role' });
-      return;
+    try {
+      const result = await signIn(data.email, data.password, role);
+      setRedirectTo(result.redirectTo);
+      setSuccess(true);
+      setTimeout(() => router.push(result.redirectTo), 700);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to sign in';
+      setError('root', { message });
+    } finally {
+      setLoading(false);
     }
-
-    localStorage.setItem('agromarket_user', JSON.stringify(result.user));
-    setRedirectTo(result.redirectTo);
-    setSuccess(true);
-    setTimeout(() => router.push(result.redirectTo), 700);
   };
 
   if (success) {
